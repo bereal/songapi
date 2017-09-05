@@ -23,12 +23,6 @@ class Store:
 
         return result
 
-    def get_average_difficulty(self, level=None):
-        raise NotImplementedError
-
-    def search(self, text):
-        raise NotImplementedError
-
     def list(self, after_id=None, limit=20):
         query = {}
         if after_id:
@@ -43,3 +37,17 @@ class Store:
             'rating.votes': 1,
         }
         self._col.update({'_id': _normalize_id(song_id)}, {'$inc': inc})
+
+    AVG_LEVEL_GROUP = {'$group': {'_id': None, 'avg': {'$avg': '$difficulty'}}}
+
+    def get_average_difficulty(self, level=None):
+        pipeline = []
+        if level:
+            pipeline.append({'$match': {'level': level}})
+
+        pipeline.append(self.AVG_LEVEL_GROUP)
+        result = next(self._col.aggregate(pipeline), {})
+        return result.get('avg', 0)
+
+    def search(self, text):
+        raise NotImplementedError

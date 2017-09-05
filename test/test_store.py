@@ -38,7 +38,7 @@ def store(db):
     return Store(db)
 
 
-# ObjectIds in Mongo are so it is safe to assume that
+# ObjectIds in Mongo are ordered, so it is safe to assume that
 # the order of test data matches the one in the DB.
 
 def verify_output(expected, actual):
@@ -46,6 +46,7 @@ def verify_output(expected, actual):
     for exp, act in zip(expected, actual):
         for k, v in exp.items():
             assert act[k] == v
+
 
 def test_list_all(store, test_data):
     result = store.list(limit=len(test_data))
@@ -69,7 +70,7 @@ def test_list_paging(store, test_data):
     assert not store.list(after_id=last_id, limit=1)
 
 
-def test_add_rating(store, test_data):
+def test_add_rating(store):
     song_id = str(store.list(limit=1)[0]['_id'])
     store.add_rating(song_id, 4)
     store.add_rating(song_id, 2)
@@ -88,3 +89,9 @@ def test_find_by_id(store):
 def test_find_by_id_not_found(store):
     with pytest.raises(store.SongNotFound):
         store.find_by_id(ObjectId())
+
+
+def test_avg(store):
+    assert abs(10.3236 - store.get_average_difficulty()) < 0.001
+    assert abs(9.693 - store.get_average_difficulty(9)) < 0.001
+    assert store.get_average_difficulty(1) == 0
