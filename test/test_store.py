@@ -79,9 +79,13 @@ def test_add_rating(store):
     store.add_rating(song_id, 2)
 
     output = store.list(limit=1)[0]
-    assert output['rating']['4'] == 1
-    assert output['rating']['2'] == 1
-    assert output['rating']['votes'] == 2
+    rating = output['rating']
+    assert rating['4'] == 1
+    assert rating['2'] == 1
+    assert rating['votes'] == 2
+    assert rating['total'] == 6
+    assert rating['min'] == 2
+    assert rating['max'] == 4
 
 
 def test_find_by_id(store):
