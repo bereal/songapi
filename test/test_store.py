@@ -1,4 +1,5 @@
 import json
+import operator
 import pathlib
 import random
 
@@ -35,7 +36,9 @@ def db(test_data):
 
 @pytest.fixture(scope='function')
 def store(db):
-    return Store(db)
+    st = Store(db)
+    st.ensure_index()
+    return st
 
 
 # ObjectIds in Mongo are ordered, so it is safe to assume that
@@ -91,7 +94,44 @@ def test_find_by_id_not_found(store):
         store.find_by_id(ObjectId())
 
 
-def test_avg(store):
-    assert abs(10.3236 - store.get_average_difficulty()) < 0.001
-    assert abs(9.693 - store.get_average_difficulty(9)) < 0.001
-    assert store.get_average_difficulty(1) == 0
+@pytest.mark.parametrize('level,result',
+                         [[None, 10.3236],
+                          [9, 9.693],
+                          [1, 0]], ids=('all', 'level', 'missing'))
+def test_avg(store, level, result):
+    assert abs(result - store.get_average_difficulty(level)) < 0.001
+
+
+def test_search_artist(store):
+    result = store.search('youSiCian')
+    assert len(result) == 10
+    for song in result:
+        assert 'yousician' in song['artist'].lower()
+
+    assert len(store.search('fastfinger')) == 1
+    assert len(store.search('beatles')) == 0
+
+
+def test_search_title(store):
+    result = store.search('power')
+    assert len(result) == 1
+    assert 'power' in result[0]['title'].lower()
+
+    # with delimiter
+    assert len(store.search('waki')) == 1
+
+    # few words
+    assert len(store.search('kennel new')) == 1
+
+
+def test_search_multiple_fields(store):
+    dylan = {'artist': 'Bob Dylan', 'title': 'Lay Lady Lay'}
+    gaga = {'artist': 'Lady Gaga', 'title': 'Poker Face'}
+    store.insert(dylan)
+    store.insert(gaga)
+
+    result = store.search('lady')
+    result.sort(key=operator.itemgetter('artist'))
+    verify_output([dylan, gaga], result)
+
+    verify_output([gaga], store.search('gaga poker'))

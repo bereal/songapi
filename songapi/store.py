@@ -1,4 +1,4 @@
-import pymongo
+from pymongo import TEXT
 from bson import ObjectId
 
 
@@ -14,6 +14,10 @@ class Store:
 
     def __init__(self, db=None):
         self._col = db.songs
+
+    def ensure_index(self):
+        self._col.create_index([('title', TEXT), ('artist', TEXT)],
+                               background=True)
 
     def find_by_id(self, song_id):
         query = {'_id': _normalize_id(song_id)}
@@ -50,4 +54,8 @@ class Store:
         return result.get('avg', 0)
 
     def search(self, text):
-        raise NotImplementedError
+        query = {'$text': {'$search': text}}
+        return list(self._col.find(query, { 'score': {'$meta': 'textScore'} }))
+
+    def insert(self, song):
+        self._col.insert(song)
