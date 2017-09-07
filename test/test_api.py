@@ -22,7 +22,6 @@ class Client:
 
 @pytest.fixture(scope='function')
 def app():
-
     test_app = Flask(__name__)
     test_app.register_blueprint(api, url_prefix='/songs')
 
