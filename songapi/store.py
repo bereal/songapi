@@ -1,11 +1,21 @@
+import json
 from pymongo import MongoClient, TEXT
 from bson import ObjectId
 
 
-class Store:
-    class SongNotFound(Exception):
-        pass
+class MongoEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
 
+        return super().default(o)
+
+
+class SongNotFound(Exception):
+    pass
+
+
+class Store:
     ID = ObjectId
 
     def __init__(self, db=None):
@@ -19,17 +29,32 @@ class Store:
 
     def ensure_index(self):
         self._col.create_index([('title', TEXT), ('artist', TEXT)],
-                               background=True)
+                               background=True, name='songs_text')
+
+    init = ensure_index
+
+    def seed(self, data):
+        """Populate the DB from a file
+        """
+        self.init()
+        for song in data:
+            self._col.insert(song)
 
     def find_by_id(self, song_id):
+        """Find a song or raise SongNotFound
+        """
         query = {'_id': self._normalize_id(song_id)}
         result = self._col.find_one(query)
         if not result:
-            raise self.SongNotFound('Song {} is not found'.format(song_id))
+            raise SongNotFound(song_id)
 
         return result
 
     def list(self, after_id=None, limit=20):
+        """List the songs with pagination
+        after_id is the last song of the previous page
+        (ObjectId's are ordered)
+        """
         query = {}
         if after_id:
             query['_id'] = {'$gt': self._normalize_id(after_id)}
@@ -38,6 +63,8 @@ class Store:
         return list(result.limit(limit) if limit else result)
 
     def add_rating(self, song_id, rating):
+        """Save a rating vote for the song
+        """
         # all the aggregated stats can be calculated on-read,
         # but I anticipate reads to be much more frequent than writes
         update = {
@@ -49,7 +76,9 @@ class Store:
             '$min': {'rating.min': rating},
             '$max': {'rating.max': rating},
         }
-        self._col.update({'_id': self._normalize_id(song_id)}, update)
+        updated = self._col.update({'_id': self._normalize_id(song_id)}, update)
+        if not updated['nModified']:
+            raise SongNotFound
 
     AVG_LEVEL_GROUP = {'$group': {'_id': None, 'avg': {'$avg': '$difficulty'}}}
 
@@ -63,6 +92,9 @@ class Store:
         return result.get('avg', 0)
 
     def search(self, text):
+        """Search songs by text in title and artist;
+        the text index existence is assumed
+        """
         query = {'$text': {'$search': text}}
         return list(self._col.find(query, { 'score': {'$meta': 'textScore'} }))
 

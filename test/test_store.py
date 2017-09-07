@@ -3,11 +3,12 @@ import operator
 import pathlib
 import random
 
+import pymongo
 import pytest
 
 from bson import ObjectId
-from pymongo import MongoClient
-from songapi.store import Store
+
+from songapi.store import Store, SongNotFound
 
 # pylint: disable=redefined-outer-name,missing-docstring
 
@@ -24,20 +25,24 @@ def test_data():
 def db(test_data):
     db_name = 'test_{:08x}'.format(random.getrandbits(32))
 
-    with MongoClient() as mc:
-        db_ = mc[db_name]
-        for entry in test_data:
-            db_.songs.insert(entry)
-        try:
-            yield db_
-        finally:
-            mc.drop_database(db_name)
+    try:
+        mc = pymongo.MongoClient(serverSelectionTimeoutMS=200)
+        mc.server_info()
+    except pymongo.errors.ServerSelectionTimeoutError:
+        pytest.skip()
+
+    try:
+        yield mc[db_name]
+    finally:
+        mc.drop_database(db_name)
+        mc.close()
 
 
 @pytest.fixture(scope='function')
-def store(db):
+def store(db, test_data):
     st = Store(db)
-    st.ensure_index()
+    st.init()
+    st.seed(test_data)
     return st
 
 
@@ -88,13 +93,20 @@ def test_add_rating(store):
     assert rating['max'] == 4
 
 
+def test_add_rating_missing_id(store):
+    song_id = str(store.list(limit=1)[0]['_id'])
+    missing_id = '0' + song_id[1:]
+    with pytest.raises(SongNotFound):
+        store.add_rating(missing_id, 4)
+
+
 def test_find_by_id(store):
     for song in store.list():
         verify_output([song], [store.find_by_id(song['_id'])])
 
 
 def test_find_by_id_not_found(store):
-    with pytest.raises(store.SongNotFound):
+    with pytest.raises(SongNotFound):
         store.find_by_id(ObjectId())
 
 
