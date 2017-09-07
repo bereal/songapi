@@ -11,4 +11,7 @@ seed:
 demo:
 	PYTHONPATH=. python songapi/app.py --db-name $(DBNAME) --port $(PORT) --debug
 
+dep:
+	pip install -r requirements.txt
+
 .PHONY: test seed demo
